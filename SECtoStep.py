@@ -9,7 +9,6 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 import numpy as np
-from core.utils import create_Xt_Yt
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 #from keras.layers.recurrent import CuDNNLSTM, GRU
@@ -21,11 +20,23 @@ from keras.layers.normalization import BatchNormalization
 from keras.layers.advanced_activations import *
 from keras.optimizers import RMSprop, Adam, SGD, Nadam
 from keras.initializers import *
-from keras.layers import Dense, Activation, Dropout, CuDNNLSTM, TimeDistributed
+from keras.layers import Dense, Activation, Dropout, LSTM, TimeDistributed
 import math
 from sklearn.preprocessing import MinMaxScaler
 from keras.constraints import maxnorm
 
+##funcion para dividir en conjunto de entrenamiento y test.
+def create_Xt_Yt(X, y, percentage=0.8):
+    p = int(len(X) * percentage)
+    X_train = X[0:p]
+    Y_train = y[0:p]
+     
+#    X_train, Y_train = shuffle_in_unison(X_train, Y_train)
+ 
+    X_test = X[p:]
+    Y_test = y[p:]
+
+    return X_train, X_test, Y_train, Y_test
 
 #data entre 0 y 1
 #scaler = MinMaxScaler().fit(data[columns])
@@ -41,17 +52,17 @@ scale_inputs = True
 ##parametros
 Columns = ['High','Low','Close','Open'] ## the first ones correspond to the outputs.
 OUT_SIZE = 1 # you select the output columns changing that.
-WINDOW_LENGHT = 48
+WINDOW_LENGHT = 24
 EMB_SIZE = len(Columns)
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 STEP = 1
 FORECAST = 1
-EPOCHS = 150
+EPOCHS = 40
 
 
 
 ###lectura de datos
-original_data = pd.read_csv('BTCbitfinex.csv')[:5021].get(Columns)
+original_data = pd.read_csv('BTCbitfinex.csv').get(Columns)
 
 data = np.array(original_data)
 
@@ -93,24 +104,21 @@ for index,window_start in enumerate(range(0, data_lenght-WINDOW_LENGHT, STEP)):
 X_train, X_test, Y_train, Y_test = create_Xt_Yt(X, Y,percentage = 0.80)
 
 model = Sequential()
-model.add(CuDNNLSTM(units = 100,input_shape=(WINDOW_LENGHT,EMB_SIZE), return_sequences=True))
-model.add(Dropout(0.9))
+model.add(LSTM(units = 100,input_shape=(WINDOW_LENGHT,EMB_SIZE), return_sequences=True))
 model.add(BatchNormalization())
-model.add(CuDNNLSTM(units = 100, return_sequences=True))
-model.add(Dropout(0.9))
+model.add(LSTM(units = 100, return_sequences=True))
 model.add(BatchNormalization())
-model.add(CuDNNLSTM(units = 100, return_sequences=True))
-model.add(Dropout(0.9))
+model.add(LSTM(units = 100, return_sequences=True))
 model.add(BatchNormalization())
-model.add(CuDNNLSTM(units = 100, return_sequences=False))
+model.add(LSTM(units = 100, return_sequences=False))
 
 
 model.add(Dense(1))
 
 
-opt = Nadam(lr=0.1)
+opt = Nadam(lr=0.02)
 
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=25, min_lr=0.0001, verbose=1)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=25, min_lr=0.000001, verbose=1)
 checkpointer = ModelCheckpoint(filepath="test.hdf5", verbose=1, save_best_only=True)
 model.compile(optimizer='adam', 
               loss='mae',
@@ -122,7 +130,7 @@ history = model.fit(X_train, Y_train,
           batch_size = BATCH_SIZE, 
           verbose=1, 
           validation_data=(X_test, Y_test),
-          callbacks=[reduce_lr, checkpointer],
+          callbacks=[checkpointer],
           shuffle=True)
 
 plt.plot(history.history['loss'])
@@ -137,8 +145,8 @@ plt.show()
 
 #predictions = scaler.inverse_transform(model.predict(X_test))
 predictions = model.predict(X_test,batch_size=BATCH_SIZE)
-plt.plot(predictions[450:500])
-plt.plot(Y_test[450:500])
+plt.plot(predictions[100:200])
+plt.plot(Y_test[100:200])
 plt.plot()
 
 
